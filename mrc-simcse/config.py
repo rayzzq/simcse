@@ -9,7 +9,7 @@ TEST_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/test_score_pairs.json
 SAVE_PATH="/home/nvidia/simcse/mrc-simcse/saved_models/mrc-simcse-zen.pt"
 
 # training configuration
-EPOCHS = 1
+EPOCHS = 3
 SAMPLES = 10000
 TRAIN_BATCH_SIZE = 8
 EVAL_BATCH_SIZE = 16

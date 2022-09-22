@@ -5,6 +5,7 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
+from torch.utils.tensorboard import SummaryWriter
 from scipy.stats import spearmanr
 
 from loguru import logger
@@ -23,6 +24,8 @@ from config import (EPOCHS,
                     DEVICE,
                     POOLING,
                     PRETRAIN_MODEL_NAME_OR_PATH,)
+
+writer = SummaryWriter("./logs")
 
 def evaluate(model, dataloader) -> float:
     device = DEVICE
@@ -52,11 +55,13 @@ def evaluate(model, dataloader) -> float:
 def train(model, train_dl, dev_dl, optimizer) -> None:
     device = DEVICE
     global best
+    global global_setp
     model.train()
     early_stop_batch = 0
 
     for batch_idx, (model_input, label) in enumerate(tqdm(train_dl), start=1):
         # move to device
+        global_setp += 1
         for k in model_input:
             model_input[k] = model_input[k].to(device)
         label = label.to(device)
@@ -66,24 +71,25 @@ def train(model, train_dl, dev_dl, optimizer) -> None:
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        
+        writer.add_scalar("Loss/train", loss, global_setp)
         # evaluation
-        if batch_idx % 50 == 0:
-
+        if batch_idx % int(0.5 * len(train_dl)) == 0:
             logger.info(f'loss: {loss.item():.4f}')
             corrcoef = evaluate(model, dev_dl)
+            writer.add_scalar("Test/spear_cof", corrcoef, global_setp)
             model.train()
             if best < corrcoef:
-                early_stop_batch = 0
+                # early_stop_batch = 0
                 best = corrcoef
                 torch.save(model.state_dict(), SAVE_PATH)
                 logger.info(f"higher corrcoef: {best:.4f} in batch: {batch_idx}, save model")
                 continue
-            early_stop_batch += 1
-            if early_stop_batch == 10:
-                logger.info(f"corrcoef doesn't improve for {early_stop_batch} batch, early stop!")
-                logger.info(f"train use sample number: {(batch_idx - 10) * BATCH_SIZE}")
-                return
+            # early_stop_batch += 1
+            # if early_stop_batch == 10:
+            #     logger.info(f"corrcoef doesn't improve for {early_stop_batch} batch, early stop!")
+            #     logger.info(f"train use sample number: {(batch_idx - 10) * BATCH_SIZE}")
+            #     return
             
             
 if __name__ == '__main__':
@@ -99,6 +105,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
     # train
     best = 0
+    global_setp = 0
     for epoch in range(EPOCHS):
         logger.info(f'epoch: {epoch}')
         train(model, train_dataloader, test_dataloader, optimizer)
