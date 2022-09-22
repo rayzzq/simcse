@@ -6,7 +6,7 @@ from sklearn.utils import murmurhash3_32
 import random 
 import pandas as pd 
     
-SQUAD_ZEN="/home/nvidia/finetune-simcse/data/squad_zen/"
+SQUAD_ZEN="/home/nvidia/simcse/data/squad_zen/"
 
 
 def read_json_file(file_name):
@@ -88,7 +88,7 @@ def squad_to_samples(squad_data):
                 answers =  question.get("answers")
                 
                 qas_id = murmurhash3_32(question_text)
-                qass.append({"qas_id": qas_id, "qas": question, "ans":answers, "p_id":p_id,})
+                qass.append({"qas_id": qas_id, "qas": question_text, "ans":answers, "p_id":p_id,})
                 pairs.append({"qas_id":qas_id, "doc_id":doc_id, "p_id":p_id})
                 
     return qass, docs, pairs
@@ -113,11 +113,15 @@ def convert_to_jsonline():
     random.shuffle(train_pairs)
     random.shuffle(dev_pairs)
     
+    test_pairs = sample_eval_pairs(dev_pairs)
+    
     # save to file
-    write_jsonlines(qas,SQUAD_ZEN + "preprocessd/questions.jsonl")
-    write_jsonlines(docs, SQUAD_ZEN + "preprocessd/documents.jsonl")
-    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessd/dev_paris.jsonl")
-    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessd/train_paris.jsonl")
+    write_jsonlines(qas,SQUAD_ZEN + "preprocessed/questions.jsonl")
+    write_jsonlines(docs, SQUAD_ZEN + "preprocessed/documents.jsonl")
+    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_paris.jsonl")
+    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_paris.jsonl")
+    write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
+    
     
 
 def resample_hard_negative(pairs):
@@ -145,6 +149,40 @@ def resample_hard_negative(pairs):
     data = df.to_dict(orient="records")
     return data
 
+
+def sample_eval_pairs(pairs):
+    df = pd.DataFrame(pairs)
+    docs = df[["doc_id", "p_id"]].groupby("p_id").aggregate(lambda x: list(set(list(x))))
+    df = pd.merge(df, docs, left_on="p_id", right_on="p_id")
+    pos_pairs = []
+    neg_pairs = []
+    hn_neg_pairs = []
+    all_doc_ids = set(df["doc_id_x"].tolist())
+    for idx, row in df.iterrows():
+        qas_id = row['qas_id']
+        pos_id = row['doc_id_x']
+        doc_ids = row['doc_id_y']
+        for doc_id in doc_ids:
+            if pos_id == doc_id:
+                pos_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":3})
+            else:
+                hn_neg_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":1})
+        
+        neg_ids = random.sample(all_doc_ids, k = len(doc_ids) * 2)
+        for neg_id in neg_ids:
+            if neg_id not in doc_ids:
+                neg_pairs.append({"qas_id": qas_id, "doc_id":neg_id, "rel":0})
+    
+    num = len(pos_pairs)
+    res = []
+    res.extend(random.sample(pos_pairs, k = num))
+    res.extend(random.sample(neg_pairs, k =  10 * num))
+    res.extend(random.sample(hn_neg_pairs, k = 1 * num))
+    random.shuffle(res)
+    
+    return res 
+    
+    
 if __name__=="__main__":
     convert_to_jsonline()
     
