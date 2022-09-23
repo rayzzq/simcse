@@ -112,7 +112,7 @@ if __name__ == '__main__':
     logger.info(f'train is finished, best model is saved at {SAVE_PATH}')
     # eval
     model.load_state_dict(torch.load(SAVE_PATH))
-    dev_corrcoef = eval(model, test_dataloader)
-    test_corrcoef = eval(model, test_dataloader)
+    dev_corrcoef = evaluate(model, test_dataloader)
+    test_corrcoef = evaluate(model, test_dataloader)
     logger.info(f'dev_corrcoef: {dev_corrcoef:.4f}')
     logger.info(f'test_corrcoef: {test_corrcoef:.4f}')

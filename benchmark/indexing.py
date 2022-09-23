@@ -70,7 +70,6 @@ class DenseIndexer(object):
         self.index_id_to_db_id.extend(db_ids)
         return len(self.index_id_to_db_id)
 
-
 class DenseFlatIndexer(DenseIndexer):
     def __init__(self, buffer_size: int = 50000):
         super(DenseFlatIndexer, self).__init__(buffer_size=buffer_size)

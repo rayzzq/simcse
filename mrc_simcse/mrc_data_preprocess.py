@@ -93,36 +93,26 @@ def squad_to_samples(squad_data):
                 
     return qass, docs, pairs
                     
-                    
-def convert_to_jsonline():
+
+def cmrc_to_samples(cmrc_data):
+    pairs = []
+    docs = []
+    qass = []
     
-    # read original data 
-    train_data = read_json_file(SQUAD_ZEN + "train-zen-v1.0.json")
-    dev_data = read_json_file(SQUAD_ZEN + "dev-zen-v1.0.json")
-    qas, docs, train_pairs = squad_to_samples(train_data)
-    dev_qas, dev_docs, dev_pairs = squad_to_samples(dev_data)
-    
-    qas.extend(dev_qas)
-    docs.extend(dev_docs)
-    
-    # sample hard_negative data 
-    train_pairs = resample_hard_negative(train_pairs)
-    dev_pairs = resample_hard_negative(dev_pairs)
-    
-    # shuffle pairs
-    random.shuffle(train_pairs)
-    random.shuffle(dev_pairs)
-    
-    test_pairs = sample_eval_pairs(dev_pairs)
-    
-    # save to file
-    write_jsonlines(qas,SQUAD_ZEN + "preprocessed/questions.jsonl")
-    write_jsonlines(docs, SQUAD_ZEN + "preprocessed/documents.jsonl")
-    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_paris.jsonl")
-    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_paris.jsonl")
-    write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
-    
-    
+    for document in cmrc_data:
+        title = document.get("title")
+        d_id = murmurhash3_32(title)
+        context = document.get("context")
+        qas = document.get("qas")
+        for question in qas:
+            question_text = question.get("query_text")
+            answers = question.get("answers")
+            qas_id = murmurhash3_32(question_text)
+            qass.append({"qas_id": qas_id, "qas": question_text, "ans":answers})
+            pairs.append({"qas_id":qas_id, "doc_id":qas_id, "p_id":qas_id})
+            docs.append({"doc_id":qas_id, "title": title, "context":context, "p_id":qas_id})
+        
+
 
 def resample_hard_negative(pairs):
     df = pd.DataFrame(pairs)
@@ -182,8 +172,38 @@ def sample_eval_pairs(pairs):
     
     return res 
     
+
+def convert_squad_to_jsonline():
     
+    # read original data 
+    train_data = read_json_file(SQUAD_ZEN + "train-zen-v1.0.json")
+    dev_data = read_json_file(SQUAD_ZEN + "dev-zen-v1.0.json")
+ 
+    qas, docs, train_pairs = squad_to_samples(train_data)
+    dev_qas, dev_docs, dev_pairs = squad_to_samples(dev_data)
+    
+    qas.extend(dev_qas)
+    docs.extend(dev_docs)
+    
+    # sample hard_negative data 
+    train_pairs = resample_hard_negative(train_pairs)
+    dev_pairs = resample_hard_negative(dev_pairs)
+    
+    # shuffle pairs
+    random.shuffle(train_pairs)
+    random.shuffle(dev_pairs)
+    
+    test_pairs = sample_eval_pairs(dev_pairs)
+    
+    # save to file
+    write_jsonlines(qas,SQUAD_ZEN + "preprocessed/questions.jsonl")
+    write_jsonlines(docs, SQUAD_ZEN + "preprocessed/documents.jsonl")
+    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_paris.jsonl")
+    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_paris.jsonl")
+    write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
+    
+
 if __name__=="__main__":
-    convert_to_jsonline()
+    convert_squad_to_jsonline()
     
     
