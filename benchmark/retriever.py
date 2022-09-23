@@ -5,51 +5,70 @@ import faiss
 import numpy as np
 import jsonlines
 from tqdm import tqdm
+import os 
+
 
 BERT = "bert-base-chinese"
 HFL_ROBERTA = "hfl/chinese-roberta-wwm-ext"
 SIMCSE_ZEN_MODEL = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
 MULTILINUGA = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+ZH_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
+UER_SIMCSE = "uer/simcse-base-chinese"
 
-MODEL_NAME = HFL_ROBERTA
+MODEL_NAME = UER_SIMCSE
+
+DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_robust"
+DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data"
+
+
+if not os.path.exists(DATA_NAME):
+    os.mkdir(DATA_NAME)
+
+
 class DocRetriever:
     def __init__(self, docs: List[Dict], embedder=None):
-        self.docs = docs
+        self.docs = []
         self.idx_to_docid = {}
         self.docid_to_text = {}
 
         for idx, doc in enumerate(docs):
             self.idx_to_docid[idx] = doc.get("doc_id")
-            self.docid_to_text[doc.get("doc_id")] = doc.get("title") + "|" + doc.get("context")
+            self.docs.append(doc.get("title") + "|" + doc.get("context"))
+        
 
         self.embedder = embedder
         self.faiss = None 
         
+        if "/" in MODEL_NAME:
+            self.name = MODEL_NAME.split("/")[-1]
+        else:
+            self.name = MODEL_NAME
+        
+        
     def set_embedder(self, embedder: SentenceTransformer):
         self.embedder = embedder
 
-    def build_index(self, doc_embs=None):
+    def build_index(self, doc_embs=None, device=0):
         assert self.embedder is not None, "embedder is not set"
+        assert self.name is not None, "name is not set"
+        
+        name = self.name
+
         d = self.embedder.get_sentence_embedding_dimension()
         self.faiss = faiss.IndexFlatIP(d)
-
+        
         if doc_embs is None:
-            docs = list(self.docid_to_text.values())
-            doc_embs = self.embedder.encode(docs, device=0)
-            
-            if "/" in MODEL_NAME:
-                name = MODEL_NAME.split("/")[-1]
+            if os.path.exists(f"{DATA_NAME}/{name}.npy"):
+                print("loading doc embs from file")
+                doc_embs = np.load(f"{DATA_NAME}/{name}.npy")
             else:
-                name = MODEL_NAME
-            np.save(f"./doc_embedding/{name}.npy", doc_embs)
+                print("encoding doc embs")
+                doc_embs = self.embedder.encode(self.docs, device=device, show_progress_bar=True)
+                np.save(f"{DATA_NAME}/{name}.npy", doc_embs)
         
         self.faiss.add(doc_embs)
 
-    def load_index(self):
-        doc_embs = np.load("doc_embeddings.npy")
-        self.faiss.add(doc_embs)
-
-    def retrieve(self, qas: Union[List[str], str], topk=1, return_text=False):
+    def retrieve(self, qas: Union[List[str], str], topk=1, return_text=False, device=0):
         if isinstance(qas, str):
             qas = [qas]
 
@@ -57,26 +76,27 @@ class DocRetriever:
         assert self.faiss is not None, "faiss is not built"
         assert isinstance(qas, list), "qas should be a list of str"
 
-        qas_embs = self.embedder.encode(qas)
+        print("encoding query embs")
+        qas_embs = self.embedder.encode(qas, device=device, show_progress_bar=True)
 
         # indexs bz * topk
         scores, indexs = self.faiss.search(qas_embs, topk)
         res = {}
 
         idx2did = np.vectorize(lambda x: self.idx_to_docid[x])
-        did2text = np.vectorize(lambda x: self.docid_to_text[x])
 
         res['scores'] = scores
         res['docids'] = idx2did(indexs)
         if return_text:
-            res["text"] = did2text(res['docids'])
+            idx2text = np.vectorize(lambda x: self.docs[x])
+            res["text"] = idx2text(indexs)
 
         return res
 
 
 def test_doc_retriever(retriever, qas_map, qas_doc, topk=10):
     mrr = 0
-    for qd_pair in tqdm(qas_doc):
+    for idx, qd_pair in enumerate(tqdm(qas_doc)):
         qas_id = qd_pair.get("qas_id")
         doc_id = qd_pair.get("doc_id")
         question = qas_map.get(qas_id)
@@ -85,14 +105,46 @@ def test_doc_retriever(retriever, qas_map, qas_doc, topk=10):
             res = retriever.retrieve(question, topk=topk)
             docids = res.get("docids")
             x, rank = np.where(docids == doc_id)
-            if len(x) > 0:
-                rr = 1 / (x[0] + 1)
+            if len(rank) > 0:
+                rr = 1 / (rank[0] + 1)
             else:
                 rr = 0
             mrr += rr
 
     mrr /= len(qas_doc)
+    print(MODEL_NAME)
     print(f"mrr@{topk} is {mrr}")
+
+def batch_test_doc_retriever(retriever, qas_map, qas_doc, topk=10):
+    
+    questions = []
+    doc_ids = []
+    for idx, qd_pair in enumerate(qas_doc):
+        qas_id = qd_pair.get("qas_id")
+        doc_id = qd_pair.get("doc_id")
+        question = qas_map.get(qas_id)
+    
+        questions.append(question)
+        doc_ids.append(doc_id)
+    
+    res = retriever.retrieve(questions, topk=topk)
+    pred_docids = res.get("docids")
+    
+    mrr = 0
+    for true_id, pre_ids in zip(doc_ids, pred_docids):
+        rank, = np.where(pre_ids == true_id)
+        if len(rank) > 0:
+            rr = 1 / (rank[0] + 1)
+        else:
+            rr = 0
+        mrr += rr
+        
+    mrr /= len(qas_doc)
+    print(DATA_NAME)
+    print(MODEL_NAME)
+    print(f"mrr@{topk} is {mrr}")
+    
+    
 
 def build_model(model_name):
     if "sentence-transformers" in model_name:
@@ -107,13 +159,13 @@ def build_model(model_name):
 
 if __name__ == "__main__":
 
-    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/documents.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/preprocessed/documents.jsonl", 'r') as f:
         docs = list(f)
 
-    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/questions.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/preprocessed/questions.jsonl", 'r') as f:
         qas = list(f)
 
-    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/dev_paris.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/preprocessed/dev_paris.jsonl", 'r') as f:
         qas_doc = list(f)
 
     qas_map = {}
@@ -126,4 +178,4 @@ if __name__ == "__main__":
     retriever = DocRetriever(docs, embedder=model)
     retriever.build_index()
 
-    test_doc_retriever(retriever, qas_map, qas_doc, topk=10)
+    batch_test_doc_retriever(retriever, qas_map, qas_doc, topk=5)

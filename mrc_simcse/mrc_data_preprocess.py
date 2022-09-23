@@ -7,7 +7,7 @@ import random
 import pandas as pd 
     
 SQUAD_ZEN="/home/nvidia/simcse/data/squad_zen/"
-
+DUREADER_ROBOUST="/home/nvidia/simcse/data/dureader_robust-data/"
 
 def read_json_file(file_name):
     with open(file_name, 'r', encoding="utf-8") as f:
@@ -18,6 +18,63 @@ def read_json_file(file_name):
 def write_jsonlines(data, filename):
     with jsonlines.open(filename, 'w') as f:
         f.write_all(data)
+
+def resample_hard_negative(pairs):
+    df = pd.DataFrame(pairs)
+    
+    # sample p_id different doc_id
+    docs = df[["doc_id", "p_id"]].groupby("p_id").aggregate(lambda x: list(set(list(x))))
+    df = pd.merge(df, docs, left_on="p_id", right_on="p_id")
+    
+    # random select hard_negative context
+    def select_hard_negative(curr_id, id_set):
+        if len(id_set) <= 1:
+            return None 
+        hn_id = random.sample(id_set,k=1)[0]
+        while curr_id == hn_id:
+            hn_id = random.sample(id_set,k=1)[0]
+        return hn_id 
+    
+    df['hn_doc_id'] = df.apply(lambda x: select_hard_negative(x['doc_id_x'], x["doc_id_y"]), axis=1)
+    df = df.rename(columns = {"doc_id_x":"doc_id"})
+    
+    df = df[["qas_id", "doc_id", "hn_doc_id", "p_id"]]
+    df.dropna(inplace=True)
+    
+    data = df.to_dict(orient="records")
+    return data
+
+def sample_eval_pairs(pairs):
+    df = pd.DataFrame(pairs)
+    docs = df[["doc_id", "p_id"]].groupby("p_id").aggregate(lambda x: list(set(list(x))))
+    df = pd.merge(df, docs, left_on="p_id", right_on="p_id")
+    pos_pairs = []
+    neg_pairs = []
+    hn_neg_pairs = []
+    all_doc_ids = set(df["doc_id_x"].tolist())
+    for idx, row in df.iterrows():
+        qas_id = row['qas_id']
+        pos_id = row['doc_id_x']
+        doc_ids = row['doc_id_y']
+        for doc_id in doc_ids:
+            if pos_id == doc_id:
+                pos_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":3})
+            else:
+                hn_neg_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":1})
+        
+        neg_ids = random.sample(all_doc_ids, k = len(doc_ids) * 2)
+        for neg_id in neg_ids:
+            if neg_id not in doc_ids:
+                neg_pairs.append({"qas_id": qas_id, "doc_id":neg_id, "rel":0})
+    
+    num = len(pos_pairs)
+    res = []
+    res.extend(random.sample(pos_pairs, k = num))
+    res.extend(random.sample(neg_pairs, k =  10 * num))
+    res.extend(random.sample(hn_neg_pairs, k = 1 * num))
+    random.shuffle(res)
+    
+    return res 
 
 
 def squad_to_samples(squad_data):
@@ -93,7 +150,7 @@ def squad_to_samples(squad_data):
                 
     return qass, docs, pairs
                     
-
+# TODO Still need to be implemented
 def cmrc_to_samples(cmrc_data):
     pairs = []
     docs = []
@@ -111,67 +168,7 @@ def cmrc_to_samples(cmrc_data):
             qass.append({"qas_id": qas_id, "qas": question_text, "ans":answers})
             pairs.append({"qas_id":qas_id, "doc_id":qas_id, "p_id":qas_id})
             docs.append({"doc_id":qas_id, "title": title, "context":context, "p_id":qas_id})
-        
 
-
-def resample_hard_negative(pairs):
-    df = pd.DataFrame(pairs)
-    
-    # sample p_id different doc_id
-    docs = df[["doc_id", "p_id"]].groupby("p_id").aggregate(lambda x: list(set(list(x))))
-    df = pd.merge(df, docs, left_on="p_id", right_on="p_id")
-    
-    # random select hard_negative context
-    def select_hard_negative(curr_id, id_set):
-        if len(id_set) <= 1:
-            return None 
-        hn_id = random.sample(id_set,k=1)[0]
-        while curr_id == hn_id:
-            hn_id = random.sample(id_set,k=1)[0]
-        return hn_id 
-    
-    df['hn_doc_id'] = df.apply(lambda x: select_hard_negative(x['doc_id_x'], x["doc_id_y"]), axis=1)
-    df = df.rename(columns = {"doc_id_x":"doc_id"})
-    
-    df = df[["qas_id", "doc_id", "hn_doc_id", "p_id"]]
-    df.dropna(inplace=True)
-    
-    data = df.to_dict(orient="records")
-    return data
-
-
-def sample_eval_pairs(pairs):
-    df = pd.DataFrame(pairs)
-    docs = df[["doc_id", "p_id"]].groupby("p_id").aggregate(lambda x: list(set(list(x))))
-    df = pd.merge(df, docs, left_on="p_id", right_on="p_id")
-    pos_pairs = []
-    neg_pairs = []
-    hn_neg_pairs = []
-    all_doc_ids = set(df["doc_id_x"].tolist())
-    for idx, row in df.iterrows():
-        qas_id = row['qas_id']
-        pos_id = row['doc_id_x']
-        doc_ids = row['doc_id_y']
-        for doc_id in doc_ids:
-            if pos_id == doc_id:
-                pos_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":3})
-            else:
-                hn_neg_pairs.append({"qas_id": qas_id, "doc_id":doc_id, "rel":1})
-        
-        neg_ids = random.sample(all_doc_ids, k = len(doc_ids) * 2)
-        for neg_id in neg_ids:
-            if neg_id not in doc_ids:
-                neg_pairs.append({"qas_id": qas_id, "doc_id":neg_id, "rel":0})
-    
-    num = len(pos_pairs)
-    res = []
-    res.extend(random.sample(pos_pairs, k = num))
-    res.extend(random.sample(neg_pairs, k =  10 * num))
-    res.extend(random.sample(hn_neg_pairs, k = 1 * num))
-    random.shuffle(res)
-    
-    return res 
-    
 
 def convert_squad_to_jsonline():
     
@@ -201,9 +198,40 @@ def convert_squad_to_jsonline():
     write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_paris.jsonl")
     write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_paris.jsonl")
     write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
+
+
+def convert_dureader_to_jsonlines():
+    # read original data 
+    train_data = read_json_file(DUREADER_ROBOUST + "train.json")
+    dev_data = read_json_file(DUREADER_ROBOUST + "dev.json")
+    
+    qas, docs, train_pairs = squad_to_samples(train_data)
+    dev_qas, dev_docs, dev_pairs = squad_to_samples(dev_data)
+    
+    
+    qas.extend(dev_qas)
+    docs.extend(dev_docs)
+    
+    # # sample hard_negative data 
+    # train_pairs = resample_hard_negative(train_pairs)
+    # dev_pairs = resample_hard_negative(dev_pairs)
+    
+    # shuffle pairs
+    random.shuffle(train_pairs)
+    random.shuffle(dev_pairs)
+    
+    # test_pairs = sample_eval_pairs(dev_pairs)
+    
+    # save to file
+    write_jsonlines(qas,DUREADER_ROBOUST + "preprocessed/questions.jsonl")
+    write_jsonlines(docs, DUREADER_ROBOUST + "preprocessed/documents.jsonl")
+    write_jsonlines(dev_pairs, DUREADER_ROBOUST + "preprocessed/dev_paris.jsonl")
+    write_jsonlines(train_pairs, DUREADER_ROBOUST + "preprocessed/train_paris.jsonl")
+    # write_jsonlines(test_pairs, DUREADER_ROBOUST + "preprocessed/test_score_pairs.jsonl")
+    
     
 
 if __name__=="__main__":
-    convert_squad_to_jsonline()
-    
+    # convert_squad_to_jsonline()
+    convert_dureader_to_jsonlines()
     
