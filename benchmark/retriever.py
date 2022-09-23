@@ -1,126 +1,129 @@
-logger = logging.getLogger(__name__)
+
+from typing import List, Union, Tuple, Dict
+from sentence_transformers import SentenceTransformer, models
+import faiss
+import numpy as np
+import jsonlines
+from tqdm import tqdm
+
+BERT = "bert-base-chinese"
+HFL_ROBERTA = "hfl/chinese-roberta-wwm-ext"
+SIMCSE_ZEN_MODEL = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
+MULTILINUGA = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+
+MODEL_NAME = HFL_ROBERTA
+class DocRetriever:
+    def __init__(self, docs: List[Dict], embedder=None):
+        self.docs = docs
+        self.idx_to_docid = {}
+        self.docid_to_text = {}
+
+        for idx, doc in enumerate(docs):
+            self.idx_to_docid[idx] = doc.get("doc_id")
+            self.docid_to_text[doc.get("doc_id")] = doc.get("title") + "|" + doc.get("context")
+
+        self.embedder = embedder
+        self.faiss = None 
+        
+    def set_embedder(self, embedder: SentenceTransformer):
+        self.embedder = embedder
+
+    def build_index(self, doc_embs=None):
+        assert self.embedder is not None, "embedder is not set"
+        d = self.embedder.get_sentence_embedding_dimension()
+        self.faiss = faiss.IndexFlatIP(d)
+
+        if doc_embs is None:
+            docs = list(self.docid_to_text.values())
+            doc_embs = self.embedder.encode(docs, device=0)
+            
+            if "/" in MODEL_NAME:
+                name = MODEL_NAME.split("/")[-1]
+            else:
+                name = MODEL_NAME
+            np.save(f"./doc_embedding/{name}.npy", doc_embs)
+        
+        self.faiss.add(doc_embs)
+
+    def load_index(self):
+        doc_embs = np.load("doc_embeddings.npy")
+        self.faiss.add(doc_embs)
+
+    def retrieve(self, qas: Union[List[str], str], topk=1, return_text=False):
+        if isinstance(qas, str):
+            qas = [qas]
+
+        assert self.embedder is not None, "embedder is not set"
+        assert self.faiss is not None, "faiss is not built"
+        assert isinstance(qas, list), "qas should be a list of str"
+
+        qas_embs = self.embedder.encode(qas)
+
+        # indexs bz * topk
+        scores, indexs = self.faiss.search(qas_embs, topk)
+        res = {}
+
+        idx2did = np.vectorize(lambda x: self.idx_to_docid[x])
+        did2text = np.vectorize(lambda x: self.docid_to_text[x])
+
+        res['scores'] = scores
+        res['docids'] = idx2did(indexs)
+        if return_text:
+            res["text"] = did2text(res['docids'])
+
+        return res
 
 
-class RocketQARetriever(BaseRetriever):
-    def __init__(
-        self,
-        document_store: BaseDocumentStore,
-        query_embedding_model: Union[Path, str] = "facebook/dpr-question_encoder-single-nq-base",
-        passage_embedding_model: Union[Path, str] = "facebook/dpr-ctx_encoder-single-nq-base",
-        model_version: Optional[str] = None,
-        max_seq_len_query: int = 64,
-        max_seq_len_passage: int = 256,
-        top_k: int = 10,
-        use_gpu: bool = True,
-        batch_size: int = 16,
-        embed_title: bool = True,
-        use_fast_tokenizers: bool = True,
-        similarity_function: str = "dot_product",
-        global_loss_buffer_size: int = 150000,
-        progress_bar: bool = True,
-        use_auth_token: Optional[Union[str, bool]] = None,
-        scale_score: bool = True,
-    ):
-        super().__init__()
+def test_doc_retriever(retriever, qas_map, qas_doc, topk=10):
+    mrr = 0
+    for qd_pair in tqdm(qas_doc):
+        qas_id = qd_pair.get("qas_id")
+        doc_id = qd_pair.get("doc_id")
+        question = qas_map.get(qas_id)
 
-        self.document_store = document_store
-        self.batch_size = batch_size
-        self.progress_bar = progress_bar
-        self.top_k = top_k
-        self.scale_score = scale_score
+        if question is not None:
+            res = retriever.retrieve(question, topk=topk)
+            docids = res.get("docids")
+            x, rank = np.where(docids == doc_id)
+            if len(x) > 0:
+                rr = 1 / (x[0] + 1)
+            else:
+                rr = 0
+            mrr += rr
 
-        # Load model
-       #from config import DOCQA_DE_CONF
-       #self.dual_encoder = rocketqa.load_model(**DOCQA_DE_CONF)
+    mrr /= len(qas_doc)
+    print(f"mrr@{topk} is {mrr}")
 
-    def retrieve(
-        self,
-        query: str,
-        filters: Optional[Dict[str, Union[Dict, List, str, int, float, bool]]] = None,
-        top_k: Optional[int] = None,
-        index: str = None,
-        headers: Optional[Dict[str, str]] = None,
-        scale_score: bool = None,
-    ):
-        if top_k is None:
-            top_k = self.top_k
-        if not self.document_store:
-            logger.error("Cannot perform retrieve() since DensePassageRetriever initialized with document_store=None")
-            return []
-        if index is None:
-            index = self.document_store.index
-        if scale_score is None:
-            scale_score = self.scale_score
+def build_model(model_name):
+    if "sentence-transformers" in model_name:
+        return SentenceTransformer(model_name)
+    
+    word_embedding_model = models.Transformer(model_name, max_seq_length=512)
+    pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode="cls")
+    model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+    
+    return model 
+    
 
-        # 1. Query -> emb
-        q_embs = self.embed_queries(query)
-        # 2. Emb -> Search -> Docs
-        documents = self.document_store.query_by_embedding(
-            query_emb=q_embs[0], top_k=top_k, filters=filters, index=index, headers=headers, scale_score=scale_score
-        )
+if __name__ == "__main__":
 
-        return documents
+    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/documents.jsonl", 'r') as f:
+        docs = list(f)
 
-    def retrieve_batch(
-        self,
-        queries: List[str],
-        filters = None,
-        top_k: Optional[int] = None,
-        index: str = None,
-        headers: Optional[Dict[str, str]] = None,
-        batch_size: Optional[int] = None,
-        scale_score: bool = None,
-    ):
-        logger.error("Not implemented!")
-        return None
+    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/questions.jsonl", 'r') as f:
+        qas = list(f)
 
+    with jsonlines.open("/home/nvidia/simcse/data/squad_zen/preprocessed/dev_paris.jsonl", 'r') as f:
+        qas_doc = list(f)
 
-    def embed_queries(self, texts):
-        if isinstance(texts, str):
-            texts = [texts]
-        assert isinstance(texts, list), "Expecting a list of texts when embed queries"
+    qas_map = {}
+    for q in qas:
+        q_id = q.get("qas_id")
+        text = q.get("qas")
+        qas_map[q_id] = text
 
-        q_embs = list()
-        for tt in texts:
-          q_embs.append(encode_query(tt))
+    model = build_model(MODEL_NAME)
+    retriever = DocRetriever(docs, embedder=model)
+    retriever.build_index()
 
-        return np.array(q_embs)
-
-    def embed_documents(self, docs):
-        embs = list()
-        for doc in docs:
-          para = doc.content
-          embs.append(encode_para(para))
-
-        return np.array(embs)
-
-
-    def _embed_queries(self, texts):
-        """
-        Create embeddings for a list of queries using the query encoder
-        List[str] -> List[np.ndarray]
-
-        :param texts: Queries to embed
-        :return: Embeddings, one per input queries
-        """
-        if isinstance(texts, str):
-            texts = [texts]
-        assert isinstance(texts, list), "Expecting a list of texts when embed queries"
-        q_embs = self.dual_encoder.encode_query(query=texts)
-        q_embs = np.array(list(q_embs))
-
-        return q_embs
-
-    def _embed_documents(self, docs):
-        """
-        Create embeddings for a list of documents using the passage encoder
-        List[Document] -> List[np.ndarray]
-
-        :param docs: List of Document objects used to represent documents / passages in a standardized way within Haystack.
-        :return: Embeddings of documents / passages shape (batch_size, embedding_dim)
-        """
-        para_list = [ d.content for d in docs ]
-        title_list = []
-        para_embs = self.dual_encoder.encode_para(
-            para=para_list, title=title_list)
-        para_embs = np.array(list(para_embs))
+    test_doc_retriever(retriever, qas_map, qas_doc, topk=10)
