@@ -195,8 +195,8 @@ def convert_squad_to_jsonline():
     # save to file
     write_jsonlines(qas,SQUAD_ZEN + "preprocessed/questions.jsonl")
     write_jsonlines(docs, SQUAD_ZEN + "preprocessed/documents.jsonl")
-    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_paris.jsonl")
-    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_paris.jsonl")
+    write_jsonlines(dev_pairs, SQUAD_ZEN + "preprocessed/dev_pairs.jsonl")
+    write_jsonlines(train_pairs, SQUAD_ZEN + "preprocessed/train_pairs.jsonl")
     write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
 
 
@@ -225,8 +225,8 @@ def convert_dureader_to_jsonlines():
     # save to file
     write_jsonlines(qas,DUREADER_ROBOUST + "preprocessed/questions.jsonl")
     write_jsonlines(docs, DUREADER_ROBOUST + "preprocessed/documents.jsonl")
-    write_jsonlines(dev_pairs, DUREADER_ROBOUST + "preprocessed/dev_paris.jsonl")
-    write_jsonlines(train_pairs, DUREADER_ROBOUST + "preprocessed/train_paris.jsonl")
+    write_jsonlines(dev_pairs, DUREADER_ROBOUST + "preprocessed/dev_pairs.jsonl")
+    write_jsonlines(train_pairs, DUREADER_ROBOUST + "preprocessed/train_pairs.jsonl")
     # write_jsonlines(test_pairs, DUREADER_ROBOUST + "preprocessed/test_score_pairs.jsonl")
     
     

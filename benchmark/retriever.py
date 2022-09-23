@@ -1,4 +1,3 @@
-
 from typing import List, Union, Tuple, Dict
 from sentence_transformers import SentenceTransformer, models
 import faiss
@@ -10,15 +9,16 @@ import os
 
 BERT = "bert-base-chinese"
 HFL_ROBERTA = "hfl/chinese-roberta-wwm-ext"
-SIMCSE_ZEN_MODEL = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
+
 MULTILINUGA = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
-ZH_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
-UER_SIMCSE = "uer/simcse-base-chinese"
+
+CYCLONE_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
+ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
 
 MODEL_NAME = UER_SIMCSE
 
 DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_robust"
-DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data"
+DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data/preprocessed"
 
 
 if not os.path.exists(DATA_NAME):
@@ -159,13 +159,13 @@ def build_model(model_name):
 
 if __name__ == "__main__":
 
-    with jsonlines.open(f"{DATA_PATH}/preprocessed/documents.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/documents.jsonl", 'r') as f:
         docs = list(f)
 
-    with jsonlines.open(f"{DATA_PATH}/preprocessed/questions.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/questions.jsonl", 'r') as f:
         qas = list(f)
 
-    with jsonlines.open(f"{DATA_PATH}/preprocessed/dev_paris.jsonl", 'r') as f:
+    with jsonlines.open(f"{DATA_PATH}/dev_pairs.jsonl", 'r') as f:
         qas_doc = list(f)
 
     qas_map = {}
