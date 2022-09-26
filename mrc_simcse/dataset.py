@@ -154,10 +154,7 @@ class TestDataset(torch.utils.data.Dataset):
             qastions.append(qas)
             documents.append(doc)
             scores.append(score)
-        
-        print(qastions)
-        print(documents)
-        print(scores)
+            
         questions = tokenizer(qastions,
                               padding="longest",
                               truncation=True,

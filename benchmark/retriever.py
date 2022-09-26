@@ -10,14 +10,17 @@ import os
 BERT = "bert-base-chinese"
 HFL_ROBERTA = "hfl/chinese-roberta-wwm-ext"
 
+CYCLONE_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
 MULTILINUGA = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
-CYCLONE_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
+
+
 ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
-ZEN_DU_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-dureader-simcse"
+ZEN_DUREADER_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-dureader-simcse"
+ZEN_MULTI_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-multi-simcse"
+DUREADER_SIMCSE = "/home/nvidia/simcse/RAYZ/dureader-roberta-simcse"
 
-
-MODEL_NAME = ZEN_DU_SIMCSE
+MODEL_NAME = CYCLONE_SIMCSE
 
 DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_only_dev"
 DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data/dev-preprocessed"

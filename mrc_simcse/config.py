@@ -13,7 +13,7 @@ DOC_FILE=f"{prefix}documents.jsonl"
 TRAIN_FILE=f"{prefix}train_pairs.jsonl"
 TEST_FILE=f"{prefix}test_score_pairs.jsonl"
 
-SAVE_PATH=f"/home/nvidia/simcse/mrc_simcse/saved_models/{DATA_NAME}-simcse.pt"
+SAVE_PATH=f"/home/nvidia/simcse/mrc_simcse/saved_models/{DATA_NAME}-zenmulti-simcse.pt"
 
 # training configuration
 EPOCHS = 3
@@ -31,5 +31,6 @@ BERT = 'bert-base-chinese'
 BERT_WWM_EXT = 'hfl/chinese-bert-wwm-ext'
 ROBERTA = 'hfl/chinese-roberta-wwm-ext'
 ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
+ZEN_MULTI_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-multi-simcse"
 
-PRETRAIN_MODEL_NAME_OR_PATH = ZEN_SIMCSE
+PRETRAIN_MODEL_NAME_OR_PATH = ZEN_MULTI_SIMCSE
