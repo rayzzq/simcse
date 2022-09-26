@@ -1,12 +1,19 @@
 import torch 
 # file path
-QAS_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/questions.jsonl"
-DOC_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/documents.jsonl"
+DATA_NAME = "dureader"
 
-TRAIN_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/train_pairs.jsonl"
-TEST_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/test_score_pairs.jsonl"
+if DATA_NAME == "squadzen":
+    prefix = "/home/nvidia/simcse/data/squad_zen/preprocessed/"
+elif DATA_NAME == "dureader":
+    prefix = "/home/nvidia/simcse/data/dureader_robust-data/preprocessed/"
+    
+    
+QAS_FILE=f"{prefix}questions.jsonl"
+DOC_FILE=f"{prefix}documents.jsonl"
+TRAIN_FILE=f"{prefix}train_pairs.jsonl"
+TEST_FILE=f"{prefix}test_score_pairs.jsonl"
 
-SAVE_PATH="/home/nvidia/simcse/mrc-simcse/saved_models/mrc-simcse-zen.pt"
+SAVE_PATH=f"/home/nvidia/simcse/mrc_simcse/saved_models/{DATA_NAME}-simcse.pt"
 
 # training configuration
 EPOCHS = 3
@@ -17,11 +24,12 @@ LR = 1e-5
 DROPOUT = 0.3
 MAX_SEQ_LEN = 512
 POOLING = 'cls'   # choose in ['cls', 'pooler', 'first-last-avg', 'last-avg']
-DEVICE = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu') 
+DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # pretrain model path
 BERT = 'bert-base-chinese'
 BERT_WWM_EXT = 'hfl/chinese-bert-wwm-ext'
 ROBERTA = 'hfl/chinese-roberta-wwm-ext'
+ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
 
-PRETRAIN_MODEL_NAME_OR_PATH = ROBERTA
+PRETRAIN_MODEL_NAME_OR_PATH = ZEN_SIMCSE

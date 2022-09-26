@@ -1,5 +1,5 @@
-
 import numpy as np
+import os 
 from tqdm import tqdm
 import torch
 from torch.nn import functional as F
@@ -11,10 +11,14 @@ from scipy.stats import spearmanr
 from loguru import logger
 
 
-from model import simcse_loss, SimcseModel, simcse_loss_with_mask
-from dataset import TrainDataset,TestDataset
+from model import simcse_unsup_loss, simcse_sup_loss, simcse_sup_loss_with_mask
+from model import SimcseModel
 
-from config import (EPOCHS,
+from dataset import SquadZenTrainDataset, DureaderTrainDataset
+from dataset import TestDataset
+
+from config import (DATA_NAME,
+                    EPOCHS,
                     TRAIN_BATCH_SIZE,
                     EVAL_BATCH_SIZE,
                     TRAIN_FILE,
@@ -25,7 +29,10 @@ from config import (EPOCHS,
                     POOLING,
                     PRETRAIN_MODEL_NAME_OR_PATH,)
 
-writer = SummaryWriter("./logs")
+if not os.path.exists(f"./logs/{DATA_NAME}"):
+    os.makedirs(f"./logs/{DATA_NAME}")
+    
+writer = SummaryWriter(f"./logs/{DATA_NAME}")
 
 def evaluate(model, dataloader) -> float:
     device = DEVICE
@@ -51,7 +58,7 @@ def evaluate(model, dataloader) -> float:
     return spearmanr(label_array, sim_tensor.cpu().numpy()).correlation
 
 
-def train(model, train_dl, dev_dl, optimizer) -> None:
+def train(model, train_dl, dev_dl, optimizer, loss_fn) -> None:
     device = DEVICE
     global best
     global global_setp
@@ -63,23 +70,25 @@ def train(model, train_dl, dev_dl, optimizer) -> None:
         global_setp += 1
         for k in model_input:
             model_input[k] = model_input[k].to(device)
-        label = label.to(device)
-        mask = mask.to(device)
+        if label is not None:
+            label = label.to(device)
+        if mask is not None:
+            mask = mask.to(device)
         
         out = model(**model_input)
         
-        loss = simcse_loss_with_mask(out, label, mask)
+        loss = loss_fn(out, label, mask)
         
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         
-        writer.add_scalar("Loss/train", loss, global_setp)
+        writer.add_scalar(f"{DATA_NAME}-Loss/train", loss, global_setp)
         # evaluation
         if batch_idx % int(0.5 * len(train_dl)) == 0:
             logger.info(f'loss: {loss.item():.4f}')
             corrcoef = evaluate(model, dev_dl)
-            writer.add_scalar("Test/spear_cof", corrcoef, global_setp)
+            writer.add_scalar(f"{DATA_NAME}-Test/spear_cof", corrcoef, global_setp)
             model.train()
             if best < corrcoef:
                 # early_stop_batch = 0
@@ -93,7 +102,15 @@ if __name__ == '__main__':
     model_path = PRETRAIN_MODEL_NAME_OR_PATH
     logger.info(f'device: {DEVICE}, pooling: {POOLING}, model path: {model_path}')
     
-    train_dataset = TrainDataset(TRAIN_FILE)
+    if DATA_NAME == "squadzen":
+        train_dataset = SquadZenTrainDataset(TRAIN_FILE)
+        loss_fn = simcse_sup_loss_with_mask
+    elif DATA_NAME == "dureader":
+        train_dataset = DureaderTrainDataset(TRAIN_FILE)
+        loss_fn = simcse_unsup_loss
+    else:
+        raise ValueError(f"data name error, {DATA_NAME}")
+    
     test_dataset = TestDataset(TEST_FILE)
     
     train_dataloader = DataLoader(train_dataset,
@@ -110,16 +127,16 @@ if __name__ == '__main__':
     model = SimcseModel(pretrained_model=model_path, pooling=POOLING)
     model.to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+    
     # train
     best = 0
     global_setp = 0
     for epoch in range(EPOCHS):
         logger.info(f'epoch: {epoch}')
-        train(model, train_dataloader, test_dataloader, optimizer)
+        train(model, train_dataloader, test_dataloader, optimizer, loss_fn)
     logger.info(f'train is finished, best model is saved at {SAVE_PATH}')
+    
     # eval
     model.load_state_dict(torch.load(SAVE_PATH))
-    dev_corrcoef = evaluate(model, test_dataloader)
     test_corrcoef = evaluate(model, test_dataloader)
-    logger.info(f'dev_corrcoef: {dev_corrcoef:.4f}')
     logger.info(f'test_corrcoef: {test_corrcoef:.4f}')

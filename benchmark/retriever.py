@@ -14,11 +14,13 @@ MULTILINUGA = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
 CYCLONE_SIMCSE = "cyclone/simcse-chinese-roberta-wwm-ext"
 ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
+ZEN_DU_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-dureader-simcse"
 
-MODEL_NAME = UER_SIMCSE
 
-DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_robust"
-DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data/preprocessed"
+MODEL_NAME = ZEN_DU_SIMCSE
+
+DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_only_dev"
+DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data/dev-preprocessed"
 
 
 if not os.path.exists(DATA_NAME):
