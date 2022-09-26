@@ -3,6 +3,7 @@ import jsonlines
 import torch
 from transformers import AutoTokenizer
 from config import QAS_FILE, DOC_FILE, MAX_SEQ_LEN, PRETRAIN_MODEL_NAME_OR_PATH
+import numpy as np 
 
 
 class QasDocData:
@@ -23,6 +24,8 @@ class QasDocData:
 
 QAS_DOC_DB = QasDocData(qas_file=QAS_FILE, doc_file=DOC_FILE)
 
+TOKENIZER = AutoTokenizer.from_pretrained(PRETRAIN_MODEL_NAME_OR_PATH)
+
 
 class TrainDataset(torch.utils.data.Dataset):
     def __init__(self, pair_file, ):
@@ -30,7 +33,13 @@ class TrainDataset(torch.utils.data.Dataset):
 
         with jsonlines.open(pair_file, 'r') as f:
             self.pair = list(f)
-
+            
+        self.pos_pairs = set()
+        for p in self.pair:
+            pos  = f"{p['qas_id']}|{p['doc_id']}"
+            self.pos_pairs.add(pos)
+            
+            
         self.db = QAS_DOC_DB
 
     def __getitem__(self, index):
@@ -46,6 +55,38 @@ class TrainDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.pair)
+    
+
+    def is_positive_key(self, q_id, d_id):
+        key = f"{q_id}|{d_id}"
+        return key in self.pos_pairs
+
+    def collate_fn(self, batch, tokenizer = TOKENIZER):
+        text = []
+        label = []
+
+        for t, l in batch:
+            text.extend(t)
+            label.extend(l)
+
+        encoded = tokenizer(text,
+                            padding="longest",
+                            truncation=True,
+                            max_length=MAX_SEQ_LEN,
+                            return_tensors="pt")
+
+        mask = np.zeros((len(label), len(label)), dtype=bool)
+        
+        for i in range(0, len(label), 3):
+            for j in range(0, len(label)):
+                if j % 3 == 0:
+                    continue 
+                mask[i][j] = self.is_positive_key(label[i], label[j])
+                mask[j][i] = mask[i][j]
+        mask = torch.tensor(mask, dtype=torch.bool)
+        label = torch.tensor(label, dtype=torch.long)
+        return encoded, label, mask
+         
 
 
 class TestDataset(torch.utils.data.Dataset):
@@ -67,55 +108,82 @@ class TestDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.pair)
 
-TOKENIZER = AutoTokenizer.from_pretrained(PRETRAIN_MODEL_NAME_OR_PATH)
+    def collate_fn(batch, tokenizer=TOKENIZER):
+        qastions = []
+        documents = []
+        scores = []
+        for qas, doc, score in batch:
+            qastions.append(qas)
+            documents.append(doc)
+            scores.append(score)
+
+        questions = tokenizer(qastions,
+                            padding="longest",
+                            truncation=True,
+                            max_length=MAX_SEQ_LEN,
+                            return_tensors="pt")
+
+        documents = tokenizer(documents,
+                            padding="longest",
+                            truncation=True,
+                            max_length=MAX_SEQ_LEN,
+                            return_tensors="pt")
+
+        return questions, documents, scores
 
 
-def train_collate_fn(batch, tokenizer=TOKENIZER):
-    text = []
-    label = []
+# def train_collate_fn(batch, tokenizer=TOKENIZER):
+#     text = []
+#     label = []
 
-    for t, l in batch:
-        text.extend(t)
-        label.extend(l)
+#     for t, l in batch:
+#         text.extend(t)
+#         label.extend(l)
 
-    encoded = tokenizer(text,
-                        padding="longest",
-                        truncation=True,
-                        max_length=MAX_SEQ_LEN,
-                        return_tensors="pt")
+#     encoded = tokenizer(text,
+#                         padding="longest",
+#                         truncation=True,
+#                         max_length=MAX_SEQ_LEN,
+#                         return_tensors="pt")
 
-    label = torch.tensor(label, dtype=torch.long)
+#     label = torch.tensor(label, dtype=torch.long)
 
-    return encoded, label
+#     return encoded, label
 
 
-def test_collate_fn(batch, tokenizer=TOKENIZER):
-    qastions = []
-    documents = []
-    scores = []
-    for qas, doc, score in batch:
-        qastions.append(qas)
-        documents.append(doc)
-        scores.append(score)
+# def test_collate_fn(batch, tokenizer=TOKENIZER):
+#     qastions = []
+#     documents = []
+#     scores = []
+#     for qas, doc, score in batch:
+#         qastions.append(qas)
+#         documents.append(doc)
+#         scores.append(score)
 
-    questions = tokenizer(qastions,
-                          padding="longest",
-                          truncation=True,
-                          max_length=MAX_SEQ_LEN,
-                          return_tensors="pt")
+#     questions = tokenizer(qastions,
+#                           padding="longest",
+#                           truncation=True,
+#                           max_length=MAX_SEQ_LEN,
+#                           return_tensors="pt")
 
-    documents = tokenizer(documents,
-                          padding="longest",
-                          truncation=True,
-                          max_length=MAX_SEQ_LEN,
-                          return_tensors="pt")
+#     documents = tokenizer(documents,
+#                           padding="longest",
+#                           truncation=True,
+#                           max_length=MAX_SEQ_LEN,
+#                           return_tensors="pt")
 
-    return questions, documents, scores
+#     return questions, documents, scores
+
 
 
 if __name__=="__main__":
-    train = TrainDataset("/home/nvidia/simcse/data/squad_zen/preprocessed/train_paris.jsonl")
+    train = TrainDataset("/home/nvidia/simcse/data/squad_zen/preprocessed/train_pairs.jsonl")
     test =  TestDataset("/home/nvidia/simcse/data/squad_zen/preprocessed/test_score_pairs.jsonl")
+    batch = []
     for t in train:
-        print(t)
-        break
+        batch.append(t)
+        if len(batch) == 3:
+            break 
+    encoded, label, mask = train.collate_fn(batch)
+    for line in mask:
+        print(line)

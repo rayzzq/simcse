@@ -67,14 +67,15 @@ def sample_eval_pairs(pairs):
             if neg_id not in doc_ids:
                 neg_pairs.append({"qas_id": qas_id, "doc_id":neg_id, "rel":0})
     
-    num = len(pos_pairs)
+    num = min(3000, len(pos_pairs))
     res = []
-    res.extend(random.sample(pos_pairs, k = num))
-    res.extend(random.sample(neg_pairs, k =  10 * num))
-    res.extend(random.sample(hn_neg_pairs, k = 1 * num))
+    res.extend(random.sample(pos_pairs, k = num)[:int(0.15*num)])
+    res.extend(random.sample(neg_pairs, k =  num)[:int(0.6*num)])
+    res.extend(random.sample(hn_neg_pairs, k = num)[:int(0.25*num)])
+    
     random.shuffle(res)
     
-    return res 
+    return res
 
 
 def squad_to_samples(squad_data):
@@ -232,6 +233,6 @@ def convert_dureader_to_jsonlines():
     
 
 if __name__=="__main__":
-    # convert_squad_to_jsonline()
-    convert_dureader_to_jsonlines()
+    convert_squad_to_jsonline()
+    # convert_dureader_to_jsonlines()
     

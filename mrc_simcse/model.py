@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from transformers import AutoModel, AutoTokenizer, BertConfig, BertModel
-from .config import *
+from config import *
 from torch.nn import functional as F
 
 
@@ -26,6 +26,27 @@ def simcse_loss(sent_emb, label, temp=0.05):
 
     return loss
 
+def simcse_loss_with_mask(sent_emb, label, mask, temp=0.05):
+    """
+    sent_emb [bz * 3, 768] torch.float
+    label[bz * 3] torch.long
+    """
+    # [bz * 3, bz * 3]
+    sim = F.cosine_similarity(sent_emb.unsqueeze(1), sent_emb.unsqueeze(0), dim=-1)
+    sim = sim / temp
+    sim = torch.where(label.unsqueeze(1) == label.unsqueeze(0), -1e12, sim)
+
+    sim = F.log_softmax(sim, dim=-1)
+    
+    sim = torch.where(mask, sim, 0)
+    normalizer = torch.sum(mask, dim=-1)
+    sim_sum = torch.sum(sim, dim=-1)
+    
+    sim_sum = torch.masked_select(sim_sum, normalizer.bool())
+    normalizer = torch.masked_select(normalizer, normalizer.bool())
+    loss = torch.mean(sim_sum / normalizer)
+    
+    return loss
 
 class SimcseModel(nn.Module):
     def __init__(self, pretrained_model, pooling):

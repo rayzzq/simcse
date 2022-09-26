@@ -3,7 +3,7 @@ import torch
 QAS_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/questions.jsonl"
 DOC_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/documents.jsonl"
 
-TRAIN_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/train_paris.jsonl"
+TRAIN_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/train_pairs.jsonl"
 TEST_FILE="/home/nvidia/simcse/data/squad_zen/preprocessed/test_score_pairs.jsonl"
 
 SAVE_PATH="/home/nvidia/simcse/mrc-simcse/saved_models/mrc-simcse-zen.pt"

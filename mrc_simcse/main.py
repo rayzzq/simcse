@@ -11,8 +11,8 @@ from scipy.stats import spearmanr
 from loguru import logger
 
 
-from model import simcse_loss, SimcseModel
-from dataset import TrainDataset,TestDataset, train_collate_fn, test_collate_fn
+from model import simcse_loss, SimcseModel, simcse_loss_with_mask
+from dataset import TrainDataset,TestDataset
 
 from config import (EPOCHS,
                     TRAIN_BATCH_SIZE,
@@ -34,8 +34,7 @@ def evaluate(model, dataloader) -> float:
     label_array = np.array([])
     with torch.no_grad():
         for idx, (qas, doc, score) in enumerate(dataloader):
-            if idx > 100:
-                break
+            
             for k in qas:
                 qas[k] = qas[k].to(device)
             for k in doc:
@@ -59,15 +58,18 @@ def train(model, train_dl, dev_dl, optimizer) -> None:
     model.train()
     early_stop_batch = 0
 
-    for batch_idx, (model_input, label) in enumerate(tqdm(train_dl), start=1):
+    for batch_idx, (model_input, label, mask) in enumerate(tqdm(train_dl), start=1):
         # move to device
         global_setp += 1
         for k in model_input:
             model_input[k] = model_input[k].to(device)
         label = label.to(device)
-
+        mask = mask.to(device)
+        
         out = model(**model_input)
-        loss = simcse_loss(out, label)
+        
+        loss = simcse_loss_with_mask(out, label, mask)
+        
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -85,19 +87,24 @@ def train(model, train_dl, dev_dl, optimizer) -> None:
                 torch.save(model.state_dict(), SAVE_PATH)
                 logger.info(f"higher corrcoef: {best:.4f} in batch: {batch_idx}, save model")
                 continue
-            # early_stop_batch += 1
-            # if early_stop_batch == 10:
-            #     logger.info(f"corrcoef doesn't improve for {early_stop_batch} batch, early stop!")
-            #     logger.info(f"train use sample number: {(batch_idx - 10) * BATCH_SIZE}")
-            #     return
             
             
 if __name__ == '__main__':
     model_path = PRETRAIN_MODEL_NAME_OR_PATH
     logger.info(f'device: {DEVICE}, pooling: {POOLING}, model path: {model_path}')
- 
-    train_dataloader = DataLoader(TrainDataset(TRAIN_FILE), batch_size=TRAIN_BATCH_SIZE, collate_fn=train_collate_fn, shuffle=True)
-    test_dataloader = DataLoader(TestDataset(TEST_FILE), batch_size=EVAL_BATCH_SIZE, collate_fn=test_collate_fn, shuffle=True)
+    
+    train_dataset = TrainDataset(TRAIN_FILE)
+    test_dataset = TestDataset(TEST_FILE)
+    
+    train_dataloader = DataLoader(train_dataset,
+                                  batch_size=TRAIN_BATCH_SIZE,
+                                  collate_fn=train_dataset.collate_fn,
+                                  shuffle=True)
+    
+    test_dataloader = DataLoader(test_dataset,
+                                 batch_size=EVAL_BATCH_SIZE,
+                                 collate_fn=test_dataset.collate_fn,
+                                 shuffle=False)
     # load model    
     assert POOLING in ['cls', 'pooler', 'last-avg', 'first-last-avg']
     model = SimcseModel(pretrained_model=model_path, pooling=POOLING)
