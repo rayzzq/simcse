@@ -88,7 +88,7 @@ def train(model, train_dl, dev_dl, optimizer, loss_fn) -> None:
         if batch_idx % int(0.2 * len(train_dl)) == 0:
             logger.info(f'loss: {loss.item():.4f}')
             corrcoef = evaluate(model, dev_dl)
-            writer.add_scalar(f"{DATA_NAME}-Test/spear_cof", corrcoef, global_setp)
+            writer.add_scalar(f"Test/spear_cof", corrcoef, global_setp)
             model.train()
             if best < corrcoef:
                 # early_stop_batch = 0
