@@ -83,9 +83,9 @@ def train(model, train_dl, dev_dl, optimizer, loss_fn) -> None:
         loss.backward()
         optimizer.step()
         
-        writer.add_scalar(f"{DATA_NAME}-Loss/train", loss, global_setp)
+        writer.add_scalar(f"Loss/train", loss, global_setp)
         # evaluation
-        if batch_idx % int(0.5 * len(train_dl)) == 0:
+        if batch_idx % int(0.2 * len(train_dl)) == 0:
             logger.info(f'loss: {loss.item():.4f}')
             corrcoef = evaluate(model, dev_dl)
             writer.add_scalar(f"{DATA_NAME}-Test/spear_cof", corrcoef, global_setp)
@@ -119,6 +119,7 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=TRAIN_BATCH_SIZE,
                                   collate_fn=train_dataset.collate_fn,
+                                  num_workers=4,
                                   shuffle=True)
     
     test_dataloader = DataLoader(test_dataset,
