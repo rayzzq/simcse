@@ -14,7 +14,7 @@ from loguru import logger
 from model import simcse_unsup_loss, simcse_sup_loss, simcse_sup_loss_with_mask
 from model import SimcseModel
 
-from dataset import SquadZenTrainDataset, DureaderTrainDataset
+from dataset import SquadZenTrainDataset, DureaderTrainDataset, DureaderRetrievalDataset
 from dataset import TestDataset
 
 from config import (DATA_NAME,
@@ -108,6 +108,9 @@ if __name__ == '__main__':
     elif DATA_NAME == "dureader":
         train_dataset = DureaderTrainDataset(TRAIN_FILE)
         loss_fn = simcse_unsup_loss
+    elif DATA_NAME == "dureader_retrieval":
+        train_dataset = DureaderRetrievalDataset(TRAIN_FILE)
+        loss_fn = simcse_sup_loss
     else:
         raise ValueError(f"data name error, {DATA_NAME}")
     

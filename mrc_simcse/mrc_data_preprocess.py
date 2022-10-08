@@ -1,4 +1,5 @@
 import pandas as pd
+import os 
 import jsonlines 
 import json 
 import numpy as np 
@@ -9,6 +10,7 @@ from typing import List, Dict, Tuple
 
 SQUAD_ZEN="/home/nvidia/simcse/data/squad_zen/"
 DUREADER_ROBOUST="/home/nvidia/simcse/data/dureader_robust-data/"
+DUREADER_RETRIEVAL="/home/nvidia/simcse/data/dureader_retrieval/"
 
 def read_json_file(file_name):
     with open(file_name, 'r', encoding="utf-8") as f:
@@ -20,7 +22,7 @@ def write_jsonlines(data, filename):
         f.write_all(data)
 
 
-# ---------------------------------------- squad_zen ----------------------------------------
+# ---------------------------------------- squad_zen --------------------------------------
 def sample_hard_negative(pairs):
     """sample hard negative samples
 
@@ -211,7 +213,7 @@ def convert_squad_to_jsonline():
     write_jsonlines(test_pairs, SQUAD_ZEN + "preprocessed/test_score_pairs.jsonl")
 
 
-# ---------------------------------------- dureader_robust ----------------------------------------
+# ---------------------------------------- dureader_robust ---------------------------------
 def sample_dureader_eval_pairs(pairs):
     df = pd.DataFrame(pairs)
     pos_pairs = []
@@ -266,7 +268,33 @@ def convert_dureader_to_jsonlines():
     write_jsonlines(dev_pairs, DUREADER_ROBOUST + "preprocessed/dev_pairs.jsonl")
     write_jsonlines(train_pairs, DUREADER_ROBOUST + "preprocessed/train_pairs.jsonl")
     write_jsonlines(test_pairs, DUREADER_ROBOUST + "preprocessed/test_score_pairs.jsonl")
+
+# TODO: currently use dureader_robust as the development set, add original dev set later
+# cd /home/nvidia/simcse/data/dureader_retrieval/simcse_preprocessed
+# cp /home/nvidia/simcse/data/dureader_robust-data/preprocessed/* ./
+# mv ./train_pairs.jsonl ./train_pairs.dureader-robust.jsonl \
+# ---------------------------------------- dureader_retrieval ------------------------------
+def convert_dureader_retrieval_to_jsonlines():
+    with open(f"{DUREADER_RETRIEVAL}train/dual.train.tsv", 'r', encoding = "utf-8" ) as f:
+        data = []
+        for line in f.readlines():
+            l = line.strip().split("\t")
+            query = l[0]
+            pos_text = l[2]
+            neg_text = l[4]
+            sample = {"query": query, "pos_text": pos_text, "neg_text": neg_text}
+            data.append(sample)
+    random.shuffle(data)
     
+    
+    if not os.path.exists(f"{DUREADER_RETRIEVAL}simcse_preprocessed"):
+        os.mkdir(f"{DUREADER_RETRIEVAL}simcse_preprocessed")
+        
+    
+    with jsonlines.open(f"{DUREADER_RETRIEVAL}simcse_preprocessed/train_pairs.jsonl", "w") as f:
+        f.write_all(data)
+
+# TODO: still not work currently
 # ---------------------------------------- cmrc2018 ----------------------------------------
 def cmrc_to_samples(cmrc_data):
     pairs = []
@@ -285,8 +313,6 @@ def cmrc_to_samples(cmrc_data):
             qass.append({"qas_id": qas_id, "qas": question_text, "ans":answers})
             pairs.append({"qas_id":qas_id, "doc_id":qas_id, "p_id":qas_id})
             docs.append({"doc_id":qas_id, "title": title, "context":context, "p_id":qas_id})
-
-
 
 if __name__=="__main__":
     # convert_squad_to_jsonline()

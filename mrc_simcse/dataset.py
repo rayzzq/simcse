@@ -2,7 +2,7 @@ import torch
 import jsonlines
 import torch
 from transformers import AutoTokenizer
-from config import QAS_FILE, DOC_FILE, MAX_SEQ_LEN, PRETRAIN_MODEL_NAME_OR_PATH,TRAIN_FILE,TEST_FILE
+from config import QAS_FILE, DOC_FILE, MAX_SEQ_LEN, PRETRAIN_MODEL_NAME_OR_PATH, TRAIN_FILE, TEST_FILE
 import numpy as np
 
 
@@ -121,10 +121,39 @@ class DureaderTrainDataset(torch.utils.data.Dataset):
                             truncation=True,
                             max_length=MAX_SEQ_LEN,
                             return_tensors="pt")
-        
+
         label = torch.tensor(label, dtype=torch.long)
 
         return encoded, label, None
+
+
+class DureaderRetrievalDataset(torch.utils.data.Dataset):
+    def __init__(self, pair_file, ):
+        super().__init__()
+
+        with jsonlines.open(pair_file, 'r') as f:
+            self.data = list(f)
+
+    def __getitem__(self, index):
+        sample = self.data[index]
+        return list(sample.values())
+
+    def __len__(self):
+        return len(self.data)
+
+    def collate_fn(self, batch, tokenizer=TOKENIZER):
+        text = []
+
+        for t in batch:
+            text.extend(t)
+
+        encoded = tokenizer(text,
+                            padding="longest",
+                            truncation=True,
+                            max_length=MAX_SEQ_LEN,
+                            return_tensors="pt")
+
+        return encoded, None, None
 
 
 class TestDataset(torch.utils.data.Dataset):
@@ -154,7 +183,7 @@ class TestDataset(torch.utils.data.Dataset):
             qastions.append(qas)
             documents.append(doc)
             scores.append(score)
-            
+
         questions = tokenizer(qastions,
                               padding="longest",
                               truncation=True,
@@ -171,7 +200,7 @@ class TestDataset(torch.utils.data.Dataset):
 
 
 if __name__ == "__main__":
-    
+
     # train_dataset = DureaderTrainDataset(TRAIN_FILE)
     # batch = []
     # for t in train_dataset:
@@ -182,7 +211,7 @@ if __name__ == "__main__":
     # print(encoded)
     # print(label)
     # print(mask)
-    
+
     test_dataset = TestDataset(TEST_FILE)
     batch = []
     for i in range(3):

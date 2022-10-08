@@ -5,19 +5,20 @@ from config import *
 from torch.nn import functional as F
 
 
-def simcse_unsup_loss(sent_emb, label, mask, temp = 0.05):
+def simcse_unsup_loss(sent_emb, label, mask, temp=0.05):
     device = sent_emb.device
     y_true = torch.arange(sent_emb.shape[0], device=device)
     y_true = (y_true - y_true % 2 * 2) + 1
-    
+
     sim = F.cosine_similarity(sent_emb.unsqueeze(1), sent_emb.unsqueeze(0), dim=-1)
     sim = sim / temp
     sim = sim - 1e12 * torch.eye(sim.shape[0], device=device)
     loss = F.cross_entropy(sim, y_true)
-    
+
     return loss
 
-def simcse_sup_loss(sent_emb, label, mask, temp=0.05):
+
+def simcse_sup_loss(sent_emb, label=None, mask=None, temp=0.05):
     """
     sent_emb [bz * 3, 768] torch.float
     label[bz * 3] torch.long
@@ -30,13 +31,21 @@ def simcse_sup_loss(sent_emb, label, mask, temp=0.05):
 
     # [bz * 3, bz * 3]
     sim = F.cosine_similarity(sent_emb.unsqueeze(1), sent_emb.unsqueeze(0), dim=-1)
-    sim = sim / temp
-    sim = torch.where(label.unsqueeze(1) == label.unsqueeze(0), -1e12, sim)
+
+    # eliminate the same setence term in the similarity matrix
+    if label is None:
+        sim = sim - 1e12 * torch.eye(sim.shape[0], device=device)
+    else:
+        sim = torch.where(label.unsqueeze(1) == label.unsqueeze(0), -1e12, sim)
+
+    # select use row
     sim = torch.index_select(sim, 0, use_row)
+    sim = sim / temp
 
     loss = F.cross_entropy(sim, y_true)
 
     return loss
+
 
 def simcse_sup_loss_with_mask(sent_emb, label, mask, temp=0.05):
     """
@@ -49,23 +58,24 @@ def simcse_sup_loss_with_mask(sent_emb, label, mask, temp=0.05):
     sim = torch.where(label.unsqueeze(1) == label.unsqueeze(0), -1e12, sim)
 
     sim = F.log_softmax(sim, dim=-1)
-    
+
     # select true position (positive pairs)
     sim = torch.where(mask, sim, 0)
-    
+
     # sum all postive pairs
     normalizer = torch.sum(mask, dim=-1)
     sim_sum = torch.sum(sim, dim=-1)
-    
+
     # normalize
     sim_sum = torch.masked_select(sim_sum, normalizer.bool())
     normalizer = torch.masked_select(normalizer, normalizer.bool())
-    
+
     # reduction use mean, negative likelihood
     loss = torch.mean(sim_sum / normalizer)
     loss = -loss
-    
+
     return loss
+
 
 class SimcseModel(nn.Module):
     def __init__(self, pretrained_model, pooling):
