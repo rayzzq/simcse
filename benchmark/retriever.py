@@ -19,8 +19,9 @@ ZEN_SIMCSE = "/home/nvidia/simcse/RAYZ/mrc_simcse_zen"
 ZEN_DUREADER_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-dureader-simcse"
 ZEN_MULTI_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-multi-simcse"
 DUREADER_SIMCSE = "/home/nvidia/simcse/RAYZ/dureader-roberta-simcse"
+DUREADER_RETRIEVAL = "/home/nvidia/simcse/RAYZ/dureader_retrieval-chinese-roberta-wwm-ext"
 
-MODEL_NAME = CYCLONE_SIMCSE
+MODEL_NAME = DUREADER_RETRIEVAL
 
 DATA_NAME = "/home/nvidia/simcse/benchmark/dureader_only_dev"
 DATA_PATH = "/home/nvidia/simcse/data/dureader_robust-data/dev-preprocessed"

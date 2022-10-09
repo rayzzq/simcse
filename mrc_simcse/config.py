@@ -37,4 +37,4 @@ ZEN_MULTI_SIMCSE = "/home/nvidia/simcse/RAYZ/squadzen-multi-simcse"
 PRETRAIN_MODEL_NAME_OR_PATH = ROBERTA
 
 start_ckp = PRETRAIN_MODEL_NAME_OR_PATH.split("/")[-1]
-SAVE_PATH=f"/home/nvidia/simcse/mrc_simcse/saved_models/{DATA_NAME}-{start_ckp}.pt"
+SAVE_PATH=f"/home/nvidia/simcse/mrc_simcse/saved_models/{DATA_NAME}-{start_ckp}"

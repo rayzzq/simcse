@@ -90,12 +90,10 @@ def train(model, train_dl, dev_dl, optimizer, loss_fn) -> None:
             corrcoef = evaluate(model, dev_dl)
             writer.add_scalar(f"Test/spear_cof", corrcoef, global_setp)
             model.train()
-            if best < corrcoef:
-                # early_stop_batch = 0
-                best = corrcoef
-                torch.save(model.state_dict(), SAVE_PATH)
-                logger.info(f"higher corrcoef: {best:.4f} in batch: {batch_idx}, save model")
-                continue
+            best = max(best, corrcoef)
+            torch.save(model.state_dict(), SAVE_PATH + f"{global_setp}-{corrcoef}.pt")
+            logger.info(f"higher corrcoef: {best:.4f} in batch: {batch_idx}, save model")
+            continue
             
             
 if __name__ == '__main__':
@@ -140,7 +138,7 @@ if __name__ == '__main__':
         train(model, train_dataloader, test_dataloader, optimizer, loss_fn)
     logger.info(f'train is finished, best model is saved at {SAVE_PATH}')
     
-    # eval
-    model.load_state_dict(torch.load(SAVE_PATH))
-    test_corrcoef = evaluate(model, test_dataloader)
-    logger.info(f'test_corrcoef: {test_corrcoef:.4f}')
+    # # eval
+    # model.load_state_dict(torch.load(SAVE_PATH))
+    # test_corrcoef = evaluate(model, test_dataloader)
+    # logger.info(f'test_corrcoef: {test_corrcoef:.4f}')
